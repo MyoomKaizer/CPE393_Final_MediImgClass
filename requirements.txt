@@ -1,0 +1,10 @@
+numpy
+nibabel
+matplotlib
+glob2
+regex
+protobuf>=5.28.0
+tensorflow==2.20.0
+scikit-image
+scikit-learn
+mlflow==2.16.0
