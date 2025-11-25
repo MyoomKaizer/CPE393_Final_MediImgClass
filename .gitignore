@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data and Models
+data/iSeg-2017-Training/*.hdr
+data/iSeg-2017-Training/*.img
+models/*.kera
+outputs/*.nii.gz
+outputs/*.json
+artifacts/
+
+# MLflow
+mlflow_data/
+mlruns/
+
+# Airflow
+logs/
+airflow.db
+airflow.cfg
+webserver_config.py
+dags/__pycache__/
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp
+temp/
+tmp/
