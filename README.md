@@ -14,17 +14,17 @@ This pipeline performs automatic 4-class brain tissue segmentation from multimod
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  Airflow Orchestration                   │
+│                  Airflow Orchestration                  │
 ├─────────────────────────────────────────────────────────┤
-│  ✓ Data Validation                                       │
-│  ✓ Model Training (U-Net, TensorFlow/Keras)             │
-│  ✓ Inference on Multiple Subjects                       │
-│  ✓ Visualization & Reporting                            │
-│  ✓ MLflow Experiment Tracking                           │
+│  - Data Validation                                      │
+│  - Model Training (U-Net, TensorFlow/Keras)             │
+│  - Inference on Multiple Subjects                       │
+│  - Visualization & Reporting                            │
+│  - MLflow Experiment Tracking                           │
 └─────────────────────────────────────────────────────────┘
         ↓
 ┌─────────────────────────────────────────────────────────┐
-│              Docker Containerization                     │
+│              Docker Containerization                    │
 ├─────────────────────────────────────────────────────────┤
 │  • iseg_trainer: Training & Inference Container         │
 │  • airflow_webserver: Orchestration UI                  │
