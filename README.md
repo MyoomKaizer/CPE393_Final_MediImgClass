@@ -452,10 +452,15 @@ Project for CPE393 - Machine Learning in Production
 ## 👥 Author
 
 Poonnawat Nontanakcheevin 65070503424
+
 Pongpong Prakobnoppakao 65070503426
+
 Pataraphol Pholngam 65070503432
+
 Garice Denoncin 68540460043
+
 Enzhuo Cao 68540470003
+
 Created for CPE393 Final Project - Medical Image Segmentation MLOps Pipeline
 
 ---
