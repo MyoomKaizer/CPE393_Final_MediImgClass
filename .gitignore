@@ -23,48 +23,34 @@ wheels/
 .installed.cfg
 *.egg
 
-# Jupyter Notebook
 .ipynb_checkpoints
-
-# Environment variables
 .env
 .venv
-
-# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# Data and Models
 data/iSeg-2017-Training/*.hdr
 data/iSeg-2017-Training/*.img
-models/*.kera
+models/*.keras
 outputs/*.nii.gz
 outputs/*.json
 artifacts/
-
-# MLflow
 mlflow_data/
 mlruns/
-
-# Airflow
 logs/
 airflow.db
 airflow.cfg
 webserver_config.py
 dags/__pycache__/
-
-# Docker
 .dockerignore
-
-# OS
 .DS_Store
+__MACOSX/
 Thumbs.db
-
-# Temporary files
 *.log
 *.tmp
 temp/
 tmp/
+mlflow.db
+training_result.txt

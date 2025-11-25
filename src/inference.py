@@ -17,21 +17,21 @@ Requirements:
 
 import argparse
 import os
+import sys
 import time
 import mlflow
 import nibabel as nib
 import numpy as np
 from tensorflow.keras.models import load_model
 
-from preprocess import normalize_volume
+from src.preprocess import normalize_volume
 
 LABEL_VALUES = [0, 10, 150, 250]
 MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run 4-class U-Net inference")
-    
-    # Allow either specific paths OR subject-id for automated pipelines
+
     parser.add_argument("--t1_path", type=str, default=None, help="Path to T1 volume")
     parser.add_argument("--t2_path", type=str, default=None, help="Path to T2 volume")
     parser.add_argument("--model_path", type=str, default="/app/models/unet_stage1_4class.keras", help="Path to .keras model")
@@ -41,16 +41,14 @@ def parse_args():
     parser.add_argument("--output-dir", type=str, default="/app/outputs", help="Output directory")
     
     args = parser.parse_args()
-    
-    # If subject-id is provided, construct paths automatically
+
     if args.subject_id is not None:
         data_dir = args.data_dir
         output_dir = args.output_dir
         args.t1_path = f"{data_dir}/subject-{args.subject_id}-T1.hdr"
         args.t2_path = f"{data_dir}/subject-{args.subject_id}-T2.hdr"
         args.out_path = f"{output_dir}/subject-{args.subject_id}-pred.nii.gz"
-    
-    # Validate required paths
+
     if args.t1_path is None or args.t2_path is None or args.out_path is None:
         parser.error("Either provide --subject-id OR all of --t1_path, --t2_path, --out_path")
     
@@ -77,7 +75,6 @@ def run_inference(t1_path, t2_path, model_path, out_path):
 
         start = time.time()
 
-        # Load model
         model = load_model(model_path, compile=False)
 
         t1_img, t1_vol = _load_volume(t1_path)

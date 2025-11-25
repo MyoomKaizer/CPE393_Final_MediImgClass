@@ -18,8 +18,6 @@ from typing import List, Tuple
 import nibabel as nib
 import numpy as np
 from sklearn.model_selection import train_test_split
-
-# Original iSeg label values (intensity values in label volumes)
 LABEL_VALUES = [0, 10, 150, 250]
 VALUE_TO_INDEX = {v: i for i, v in enumerate(LABEL_VALUES)}
 
@@ -33,7 +31,6 @@ def _load_volume(path: str) -> np.ndarray:
     img = nib.load(path)
     vol = img.get_fdata()
 
-    # Some iSeg images are stored as (H, W, Z, 1)
     if vol.ndim == 4 and vol.shape[-1] == 1:
         vol = vol[..., 0]
 
@@ -44,7 +41,6 @@ def _load_volume(path: str) -> np.ndarray:
 
 
 def normalize_volume(vol: np.ndarray) -> np.ndarray:
-    """Normalize a volume to zero mean, unit variance (on non-zero voxels)."""
     vol = vol.astype(np.float32)
     mask = vol != 0
     if not np.any(mask):
@@ -69,15 +65,12 @@ def load_subjects(data_dir: str):
 
     subjects = []
 
-    # Find all T1 files
     t1_list = sorted(glob(os.path.join(data_dir, "subject-*-T1.hdr")))
 
     if not t1_list:
         raise SystemExit("No T1 volumes found in dataset folder.")
 
     for t1_path in t1_list:
-        # Extract subject number
-        # e.g. subject-1-T1.hdr → subject-1
         base = t1_path.replace("-T1.hdr", "")
 
         t2_path = base + "-T2.hdr"
@@ -139,13 +132,12 @@ def create_slice_dataset(
             t2_slice = t2_norm[:, :, z]
             lbl_slice = lbl_vol[:, :, z]
 
-            # Map raw label values (0,10,150,250) to class indices 0..3
             class_idx = np.zeros_like(lbl_slice, dtype=np.int32)
             for value, class_id in VALUE_TO_INDEX.items():
                 class_idx[lbl_slice == value] = class_id
 
-            x = np.stack([t1_slice, t2_slice], axis=-1)  # (H, W, 2)
-            y = class_idx[..., np.newaxis]  # (H, W, 1)
+            x = np.stack([t1_slice, t2_slice], axis=-1)
+            y = class_idx[..., np.newaxis]
 
             X_slices.append(x)
             Y_slices.append(y)
@@ -167,7 +159,6 @@ def create_slice_dataset(
 
 
 if __name__ == "__main__":
-    # Quick test (you must have iSeg-2017-Training extracted)
     data_dir = "./iSeg-2017-Training"
     if not os.path.isdir(data_dir):
         raise SystemExit(f"Directory not found: {data_dir}")
@@ -178,5 +169,3 @@ if __name__ == "__main__":
     print("Y_train:", Y_train.shape)
     print("X_val:", X_val.shape)
     print("Y_val:", Y_val.shape)
-
-    

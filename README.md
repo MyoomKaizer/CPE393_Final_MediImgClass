@@ -74,10 +74,7 @@ All containers should show `Up` status and healthy health checks.
 
 **Via CLI:**
 ```powershell
-# Trigger DAG
 docker exec airflow_scheduler airflow dags trigger iseg_brain_segmentation_pipeline
-
-# Monitor logs
 docker logs -f airflow_scheduler
 ```
 
@@ -85,27 +82,99 @@ docker logs -f airflow_scheduler
 
 ```
 .
+├── src/                             # Main Python package (all production code)
+│   ├── __init__.py                  # Package exports (build_unet, load_subjects, etc.)
+│   ├── models.py                    # U-Net architecture definition
+│   ├── preprocess.py                # Data loading & preprocessing utilities
+│   ├── train.py                     # Training pipeline with MLflow integration
+│   ├── inference.py                 # Inference with predictions & logging
+│   ├── view_hdr.py                  # HDR volume visualization
+│   └── view_predict_slice.py        # Prediction slice visualization & logging
 ├── dags/
-│   └── pipeline_dag.py              # Airflow DAG definition
+│   └── pipeline_dag.py              # Airflow DAG orchestration
 ├── data/
 │   └── iSeg-2017-Training/          # MRI dataset (not in repo)
 ├── models/
 │   └── unet_stage1_4class.keras     # Trained model output
 ├── outputs/
-│   ├── subject-*-pred.nii.gz        # Predictions
-│   └── pipeline_report_*.json       # Execution reports
+│   ├── subject-*-pred.nii.gz        # Inference predictions
+│   └── pipeline_report_*.json       # Pipeline execution reports
 ├── logs/
-│   └── [Airflow task logs]
-├── train.py                         # Training script
-├── inference.py                     # Inference script
-├── models.py                        # U-Net architecture
-├── preprocess.py                    # Data preprocessing
-├── view_predict_slice.py            # Visualization utilities
+│   └── [Airflow & Docker logs]
 ├── Dockerfile                       # Training container
-├── Dockerfile.airflow               # Airflow customization
-├── docker-compose.yml               # Service orchestration
+├── Dockerfile.airflow               # Airflow extensions
+├── docker-compose.yml               # Multi-service orchestration
 ├── requirements.txt                 # Python dependencies
-└── README.md                        # This file
+└── README.md                        # Documentation
+```
+
+### Key Files
+
+The project contains only essential files:
+- **src/** - All production-ready code in Python package format
+- **dags/** - Airflow orchestration definitions
+- **data/**, **models/**, **outputs/** - Data directories (mounted in Docker)
+- **Dockerfile**, **docker-compose.yml** - Container configuration
+- **requirements.txt** - Python dependencies
+
+## 📦 Package Architecture
+
+All code is organized in the `src/` Python package for clean separation between production code and configuration files.
+
+### Execution Flow
+
+**Docker Training:**
+```
+Docker container runs: python -m src.train
+  ↓
+src/train.py main() function executes
+  ├─ imports from src.models
+  ├─ imports from src.preprocess
+  └─ logs to MLflow at http://mlflow:5000
+```
+
+**Docker Inference:**
+```
+Airflow DAG runs: python -m src.inference --subject-id N
+  ↓
+src/inference.py parse_args() and run_inference() execute
+  ├─ imports from src.preprocess
+  ├─ loads model from /app/models/
+  └─ logs to MLflow
+```
+
+**Airflow Orchestration:**
+```
+Airflow DAG (dags/pipeline_dag.py) executes:
+  ├─ Data validation (Python in Airflow container)
+  ├─ Training: DockerOperator → python -m src.train
+  ├─ Inference: DockerOperator → python -m src.inference --subject-id {1,2,3}
+  └─ Visualization & reporting (Python in Airflow container)
+```
+
+### Module Dependencies
+
+```
+src/__init__.py
+  └─ exports: build_unet, build_unet_stage1, load_subjects, create_slice_dataset, normalize_volume
+
+src/models.py (dependencies: tensorflow, keras)
+  └─ Defines: conv_block(), build_unet(), build_unet_stage1()
+
+src/preprocess.py (dependencies: nibabel, scikit-learn, scikit-image, numpy)
+  └─ Defines: load_subjects(), create_slice_dataset(), normalize_volume()
+
+src/train.py (dependencies: src.models, src.preprocess, mlflow, tensorflow)
+  └─ Defines: main() - full training pipeline with MLflow tracking
+
+src/inference.py (dependencies: src.preprocess, nibabel, mlflow, tensorflow)
+  └─ Defines: parse_args(), run_inference(), _load_volume()
+
+src/view_hdr.py (dependencies: nibabel, matplotlib)
+  └─ Defines: view_hdr_volume() - 3D volume visualization
+
+src/view_predict_slice.py (dependencies: nibabel, mlflow, matplotlib)
+  └─ Defines: view_and_log_slices(), parse_args() - slice visualization & MLflow logging
 ```
 
 ## 🔧 Configuration
@@ -317,13 +386,8 @@ docker-compose up -d --build
 ### Reset Everything
 
 ```powershell
-# Stop containers
 docker-compose down
-
-# Remove volumes
 docker volume rm cpe393_final_mediimgclass_postgres_data cpe393_final_mediimgclass_mlflow_data
-
-# Restart
 docker-compose up -d
 ```
 

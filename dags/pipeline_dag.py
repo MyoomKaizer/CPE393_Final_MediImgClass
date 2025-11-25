@@ -25,16 +25,10 @@ try:
 except ImportError as e:
     print(f"Import error: {e}")
     raise
-
-# Environment configuration
 HOST_DATA = os.environ.get("HOST_DATA", "/opt/airflow/data")
 HOST_MODELS = os.environ.get("HOST_MODELS", "/opt/airflow/models")
 HOST_OUTPUTS = os.environ.get("HOST_OUTPUTS", "/opt/airflow/outputs")
 HOST_MLFLOW = os.environ.get("HOST_MLFLOW", "/opt/airflow/mlflow_data")
-
-# Network mode - use compose network
-# Docker Compose creates network as: <project_dir>_<network_name>
-# Get the actual network name
 import subprocess
 try:
     result = subprocess.run(
@@ -49,11 +43,7 @@ try:
 except Exception as e:
     print(f"Could not auto-detect network, using env var: {e}")
     TRAINER_NETWORK_MODE = os.environ.get("TRAINER_NETWORK_MODE", "cpe393_final_mediimgclass_iseg_network")
-
-# MLflow URI
 MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
-
-# Default arguments
 default_args = {
     'owner': 'mlops-team',
     'depends_on_past': False,
@@ -63,13 +53,11 @@ default_args = {
     'retry_delay': timedelta(minutes=3),
     'execution_timeout': timedelta(hours=2),
 }
-
-# Create DAG
 dag = DAG(
     'iseg_brain_segmentation_pipeline',
     default_args=default_args,
     description='Complete MLOps pipeline for iSeg 2017 brain segmentation',
-    schedule_interval=None,  # Manual trigger
+    schedule_interval=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['mlops', 'medical-imaging', 'segmentation', 'brain-mri'],
@@ -78,7 +66,6 @@ dag = DAG(
 
 
 def validate_data(**context):
-    """Validate that required data files exist."""
     print("Starting data validation...")
     
     try:
@@ -89,8 +76,7 @@ def validate_data(**context):
         
         if not os.path.isdir(data_dir):
             raise FileNotFoundError(f"Data directory not found: {data_dir}")
-        
-        # Check for T1, T2, and label files
+
         t1_files = glob(os.path.join(data_dir, "subject-*-T1.hdr"))
         t2_files = glob(os.path.join(data_dir, "subject-*-T2.hdr"))
         label_files = glob(os.path.join(data_dir, "subject-*-label.hdr"))
@@ -109,8 +95,7 @@ def validate_data(**context):
         print(f"  - T1 files: {len(t1_files)}")
         print(f"  - T2 files: {len(t2_files)}")
         print(f"  - Label files: {len(label_files)}")
-        
-        # Push to XCom
+
         context['ti'].xcom_push(key='num_subjects', value=num_subjects)
         context['ti'].xcom_push(key='data_dir', value=data_dir)
         
@@ -124,7 +109,6 @@ def validate_data(**context):
 
 
 def check_model_exists(**context):
-    """Check if a trained model already exists."""
     print("Checking if model exists...")
     
     try:
@@ -147,7 +131,6 @@ def check_model_exists(**context):
 
 
 def decide_to_train(**context):
-    """Branch: return 'train_model' if model doesn't exist, otherwise 'skip_train'."""
     print("Deciding whether to train...")
     
     try:
@@ -165,12 +148,10 @@ def decide_to_train(**context):
         print(f"Error in decide_to_train: {str(e)}")
         import traceback
         traceback.print_exc()
-        # Default to skip if error
         return 'skip_train'
 
 
 def visualize_predictions(**context):
-    """Generate and log visualization slices for all predictions."""
     print("Starting visualization...")
     
     try:
@@ -204,12 +185,10 @@ def visualize_predictions(**context):
         print(f"Error during visualization: {str(e)}")
         import traceback
         traceback.print_exc()
-        # Don't fail pipeline on visualization errors
         print("Continuing despite visualization error...")
 
 
 def generate_pipeline_report(**context):
-    """Generate a summary report of the pipeline run."""
     print("Generating pipeline report...")
     
     try:
@@ -243,42 +222,31 @@ def generate_pipeline_report(**context):
         print(f"Error generating report: {str(e)}")
         import traceback
         traceback.print_exc()
-        # Don't fail pipeline on report errors
         return None
 
-
-# =============================================================================
-# Task Definitions
-# =============================================================================
-
 with dag:
-    # Task 1: Validate data
     task_validate_data = PythonOperator(
         task_id='validate_data',
         python_callable=validate_data,
         provide_context=True,
     )
-    
-    # Task 2: Check if model exists
+
     task_check_model = PythonOperator(
         task_id='check_model',
         python_callable=check_model_exists,
         provide_context=True,
     )
-    
-    # Task 3: Decide whether to train
+
     task_decide_train = BranchPythonOperator(
         task_id='decide_train',
         python_callable=decide_to_train,
         provide_context=True,
     )
-    
-    # Task 4: Skip training (dummy task)
+
     skip_train = EmptyOperator(
         task_id='skip_train',
     )
-    
-    # Task 5: Train model using Docker
+
     task_train_model = DockerOperator(
         task_id='train_model',
         image='iseg_trainer:latest',
@@ -293,22 +261,20 @@ with dag:
             Mount(source=HOST_OUTPUTS, target='/app/outputs', type='bind'),
             Mount(source=HOST_MLFLOW, target='/mlflow', type='bind'),
         ],
-        command='python /app/train.py',
+        command='python -m src.train',
         environment={
             'MLFLOW_TRACKING_URI': MLFLOW_URI,
             'PYTHONUNBUFFERED': '1',
         },
     )
-    
-    # Task 6: Join point after training decision
+
     train_done = EmptyOperator(
         task_id='train_done',
         trigger_rule='none_failed_min_one_success',
     )
-    
-    # Task Group: Run inference on multiple subjects
+
     with TaskGroup('inference_tasks') as inference_group:
-        for subject_num in range(1, 4):  # Subjects 1-3
+        for subject_num in range(1, 4):
             DockerOperator(
                 task_id=f'inference_subject_{subject_num}',
                 image='iseg_trainer:latest',
@@ -322,28 +288,25 @@ with dag:
                     Mount(source=HOST_MODELS, target='/app/models', type='bind'),
                     Mount(source=HOST_OUTPUTS, target='/app/outputs', type='bind'),
                 ],
-                command=f'python /app/inference.py --subject-id {subject_num}',
+                command=f'python -m src.inference --subject-id {subject_num}',
                 environment={
                     'MLFLOW_TRACKING_URI': MLFLOW_URI,
                     'PYTHONUNBUFFERED': '1',
                 },
             )
-    
-    # Task 7: Visualize predictions
+
     task_visualize = PythonOperator(
         task_id='visualize_predictions',
         python_callable=visualize_predictions,
         provide_context=True,
     )
-    
-    # Task 8: Generate report
+
     task_report = PythonOperator(
         task_id='generate_report',
         python_callable=generate_pipeline_report,
         provide_context=True,
     )
-    
-    # Define workflow dependencies
+
     task_validate_data >> task_check_model >> task_decide_train
     task_decide_train >> [task_train_model, skip_train]
     [task_train_model, skip_train] >> train_done

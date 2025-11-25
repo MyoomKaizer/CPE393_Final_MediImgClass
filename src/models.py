@@ -25,7 +25,6 @@ from tensorflow.keras import layers, models, optimizers
 
 
 def conv_block(x: tf.Tensor, filters: int, name: str) -> tf.Tensor:
-    """Two Conv2D + BN + ReLU layers."""
     x = layers.Conv2D(filters, (3, 3), padding="same", name=f"{name}_conv1")(x)
     x = layers.BatchNormalization(name=f"{name}_bn1")(x)
     x = layers.ReLU(name=f"{name}_relu1")(x)
@@ -44,10 +43,8 @@ def build_unet(
     name: str = "unet",
     use_dropout: bool = False,
 ) -> tf.keras.Model:
-    """Build and compile a 2D U-Net for multi-class segmentation."""
     inputs = layers.Input(shape=input_shape, name="input")
 
-    # Encoder
     c1 = conv_block(inputs, base_filters, "enc1")
     p1 = layers.MaxPooling2D((2, 2), name="enc1_pool")(c1)
 
@@ -60,12 +57,10 @@ def build_unet(
     c4 = conv_block(p3, base_filters * 8, "enc4")
     p4 = layers.MaxPooling2D((2, 2), name="enc4_pool")(c4)
 
-    # Bottleneck
     bn = conv_block(p4, base_filters * 16, "bottleneck")
     if use_dropout:
         bn = layers.Dropout(0.5, name="bottleneck_dropout")(bn)
 
-    # Decoder
     u4 = layers.Conv2DTranspose(
         base_filters * 8, (2, 2), strides=(2, 2), padding="same", name="dec4_up"
     )(bn)
@@ -90,7 +85,6 @@ def build_unet(
     u1 = layers.Concatenate(axis=-1, name="dec1_concat")([u1, c1])
     c8 = conv_block(u1, base_filters, "dec1")
 
-    # Multi-class output
     outputs = layers.Conv2D(
         num_classes, (1, 1), activation="softmax", name="output"
     )(c8)
@@ -111,7 +105,6 @@ def build_unet_stage1(
     base_filters: int = 16,
     learning_rate: float = 1e-3,
 ) -> tf.keras.Model:
-    """Convenience wrapper for the Stage 1 model."""
     return build_unet(
         input_shape=input_shape,
         num_classes=num_classes,
@@ -123,6 +116,5 @@ def build_unet_stage1(
 
 
 if __name__ == "__main__":
-    # Simple build sanity check
     m = build_unet_stage1()
     m.summary()

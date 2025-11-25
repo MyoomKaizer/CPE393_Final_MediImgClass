@@ -4,17 +4,23 @@ train.py
 Stage 1 training script for iSeg 2017 (T1+T2 -> 4-class segmentation).
 
 Usage:
-    (venv) PS> python train.py
+    python -m src.train
+    or
+    python train.py (from root)
 
 Make sure:
     - iSeg-2017-Training/ is extracted in the data folder.
-    - models.py and preprocess.py are in the same directory.
+    - All source files are installed from src package.
 """
 
 import os
 import sys
 import time
 import traceback
+
+# Add parent directory to path if running as script
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # -------------------------------------------
 # CONFIG
@@ -55,10 +61,10 @@ def main():
             print("Continuing without MLflow tracking...")
             TRACKING_URI = None
         
-        # Import remaining dependencies
+        # Import from src package
         from tensorflow.keras.callbacks import Callback, ModelCheckpoint
-        from preprocess import load_subjects, create_slice_dataset
-        from models import build_unet_stage1
+        from src.preprocess import load_subjects, create_slice_dataset
+        from src.models import build_unet_stage1
         
         # MLflow callback
         class MLflowMetrics(Callback):
@@ -164,7 +170,7 @@ def main():
                     mlflow.log_metric("final_val_loss", final_val_loss)
                     mlflow.log_metric("final_val_accuracy", final_val_acc)
                     
-                    # Log model (without registry for now)
+                    # Log model
                     print("\nLogging model to MLflow...")
                     try:
                         mlflow.keras.log_model(
@@ -174,7 +180,6 @@ def main():
                         print("✓ Model logged successfully")
                     except Exception as e:
                         print(f"⚠ Warning: Could not log model: {e}")
-                        # Try without logging model to avoid blocking
                     
                 except Exception as e:
                     print(f"⚠ Warning: Could not log to MLflow: {e}")

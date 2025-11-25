@@ -1,5 +1,4 @@
 services:
-  # MLflow tracking server
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.16.0
     container_name: mlflow_server
@@ -17,7 +16,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # PostgreSQL for Airflow metadata
   postgres:
     image: postgres:14
     container_name: airflow_postgres
@@ -36,7 +34,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Airflow initialization
   airflow-init:
     image: apache/airflow:2.7.3-python3.9
     entrypoint: /bin/bash
@@ -56,7 +53,6 @@ services:
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
 
-  # Airflow webserver
   airflow-webserver:
     build:
       context: .
@@ -81,7 +77,6 @@ services:
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "False"
       MLFLOW_TRACKING_URI: "http://mlflow:5000"
-      # Use the docker compose network for trainer containers
       TRAINER_NETWORK_MODE: "iseg_network"
     volumes:
       - ./dags:/opt/airflow/dags
@@ -91,11 +86,7 @@ services:
       - ./outputs:/opt/airflow/outputs
       - ./mlflow_data:/opt/airflow/mlflow_data
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./train.py:/app/train.py
-      - ./inference.py:/app/inference.py
-      - ./view_predict_slice.py:/app/view_predict_slice.py
-      - ./models.py:/app/models.py
-      - ./preprocess.py:/app/preprocess.py
+      - ./src:/app/src
     ports:
       - "8080:8080"
     command: webserver
@@ -109,7 +100,6 @@ services:
     user: "${AIRFLOW_UID:-50000}:0"
     restart: unless-stopped
 
-  # Airflow scheduler
   airflow-scheduler:
     build:
       context: .
@@ -132,7 +122,6 @@ services:
       HOST_MODELS: "${PWD}/models"
       HOST_OUTPUTS: "${PWD}/outputs"
       HOST_MLFLOW: "${PWD}/mlflow_data"
-      # Use the docker compose network for trainer containers
       TRAINER_NETWORK_MODE: "iseg_network"
     volumes:
       - ./dags:/opt/airflow/dags
@@ -142,11 +131,7 @@ services:
       - ./outputs:/opt/airflow/outputs
       - ./mlflow_data:/opt/airflow/mlflow_data
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./train.py:/app/train.py
-      - ./inference.py:/app/inference.py
-      - ./view_predict_slice.py:/app/view_predict_slice.py
-      - ./models.py:/app/models.py
-      - ./preprocess.py:/app/preprocess.py
+      - ./src:/app/src
     command: scheduler
     networks:
       - iseg_network
@@ -155,7 +140,7 @@ services:
 
 networks:
   iseg_network:
-    name: iseg_network  # Force specific name instead of prefixing
+    name: iseg_network
     driver: bridge
 
 volumes:

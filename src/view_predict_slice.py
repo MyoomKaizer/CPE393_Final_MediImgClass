@@ -10,6 +10,7 @@ Usage:
 
 import argparse
 import os
+import sys
 import mlflow
 import nibabel as nib
 import numpy as np
@@ -21,7 +22,6 @@ MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
 
 def view_and_log_slices(pred_path, mlflow_uri=MLFLOW_URI):    
 
-    # --- MLflow setup ---
     mlflow.set_tracking_uri(mlflow_uri)
     mlflow.set_experiment("iSeg-4Class-Visualization")
 
@@ -29,32 +29,27 @@ def view_and_log_slices(pred_path, mlflow_uri=MLFLOW_URI):
 
         mlflow.log_param("prediction_file", pred_path)
 
-        # ---- Load prediction volume (.nii / .nii.gz) ----
         img = nib.load(pred_path)
         vol = img.get_fdata()
 
-        # ---- Label mapping ----
         label_values = np.array([0, 10, 150, 250])
         colors = [
-            "#000000",  # background
-            "#A7D8FF",  # CSF
-            "#B8A19C",  # GM
-            "#F4F1DE",  # WM
+            "#000000",
+            "#A7D8FF",
+            "#B8A19C",
+            "#F4F1DE",
         ]
         cmap = ListedColormap(colors)
 
         val_to_idx = {v: i for i, v in enumerate(label_values)}
         vol_idx = np.vectorize(val_to_idx.get)(vol)
 
-        # ---- Select slice indices (0,10,20,...,end) ----
         step = 10
         slice_indices = list(range(0, vol_idx.shape[2], step))
 
-        # ---- Output directory for PNGs ----
         out_dir = "slice_previews"
         os.makedirs(out_dir, exist_ok=True)
 
-        # ---- Generate PNGs and log them ----
         for z in slice_indices:
             plt.figure(figsize=(4, 4))
             plt.imshow(vol_idx[:, :, z], cmap=cmap, vmin=0, vmax=3, interpolation="nearest")
@@ -78,5 +73,7 @@ def parse_args():
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
     args = parse_args()
     view_and_log_slices(args.pred_path)

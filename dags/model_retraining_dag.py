@@ -19,7 +19,6 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator, BranchPythonOperator
 from airflow.operators.empty import EmptyOperator
 
-# MLflow configuration
 MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
 default_args = {
@@ -35,7 +34,7 @@ dag = DAG(
     'model_retraining_pipeline',
     default_args=default_args,
     description='Automated model retraining and evaluation',
-    schedule_interval='0 0 * * 0',  # Weekly on Sunday midnight
+    schedule_interval='0 0 * * 0',
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['mlops', 'retraining', 'model-management'],
@@ -52,20 +51,17 @@ def check_retraining_needed(**context):
     from datetime import datetime, timedelta
     
     model_path = "/opt/airflow/models/unet_stage1_4class.keras"
-    
-    # Check if model exists
+
     if not os.path.exists(model_path):
         print("No existing model found - retraining required")
         return 'train_new_model'
-    
-    # Check model age
+
     model_age_days = (datetime.now() - datetime.fromtimestamp(
         os.path.getmtime(model_path)
     )).days
     
     print(f"Model age: {model_age_days} days")
-    
-    # Retrain if model is older than 30 days
+
     if model_age_days > 30:
         print("Model is old - retraining required")
         return 'train_new_model'
@@ -75,7 +71,6 @@ def check_retraining_needed(**context):
 
 
 def train_with_config(config_name, epochs, batch_size, base_filters, **context):
-    """Train model with specific configuration."""
     sys.path.insert(0, '/app')
     
     os.environ['MLFLOW_TRACKING_URI'] = MLFLOW_URI
@@ -100,24 +95,20 @@ def train_with_config(config_name, epochs, batch_size, base_filters, **context):
         mlflow.set_experiment("iSeg-Model-Retraining")
         
         with mlflow.start_run(run_name=f"Retrain-{config_name}"):
-            # Log configuration
             mlflow.log_param("config_name", config_name)
             mlflow.log_param("epochs", epochs)
             mlflow.log_param("batch_size", batch_size)
             mlflow.log_param("base_filters", base_filters)
-            
-            # Load data
+
             data_dir = "/opt/airflow/data/iSeg-2017-Training"
             subjects = load_subjects(data_dir)
             X_train, X_val, Y_train, Y_val = create_slice_dataset(subjects)
-            
-            # Build model
+
             model = build_unet_stage1(
                 input_shape=X_train.shape[1:],
                 base_filters=base_filters
             )
-            
-            # Train
+
             output_path = f"/opt/airflow/models/unet_{config_name}.keras"
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
@@ -136,8 +127,7 @@ def train_with_config(config_name, epochs, batch_size, base_filters, **context):
                 callbacks=[MLflowMetrics(), checkpoint],
                 verbose=1
             )
-            
-            # Log final metrics
+
             final_val_loss = history.history['val_loss'][-1]
             final_val_acc = history.history['val_accuracy'][-1]
             
@@ -148,8 +138,7 @@ def train_with_config(config_name, epochs, batch_size, base_filters, **context):
                 mlflow.log_artifact(output_path)
             except:
                 print("Warning: Could not log artifact to MLflow")
-            
-            # Store metrics for comparison
+
             context['ti'].xcom_push(
                 key=f'{config_name}_metrics',
                 value={'val_loss': final_val_loss, 'val_acc': final_val_acc}
@@ -169,7 +158,6 @@ def train_with_config(config_name, epochs, batch_size, base_filters, **context):
 
 
 def select_best_model(**context):
-    """Compare trained models and select the best one."""
     import shutil
     
     configs = ['baseline', 'larger', 'deeper']
@@ -191,8 +179,7 @@ def select_best_model(**context):
     
     if best_config:
         print(f"Best model: {best_config} with val_loss={best_loss:.4f}")
-        
-        # Copy best model to production
+
         src = f"/opt/airflow/models/unet_{best_config}.keras"
         dst = "/opt/airflow/models/unet_stage1_4class.keras"
         
@@ -209,8 +196,6 @@ def select_best_model(**context):
         print("Warning: No best model found")
         return None
 
-
-# Task definitions
 start = EmptyOperator(task_id='start', dag=dag)
 
 check_retrain = BranchPythonOperator(
@@ -222,8 +207,6 @@ check_retrain = BranchPythonOperator(
 skip_training = EmptyOperator(task_id='skip_training', dag=dag)
 
 train_new_model = EmptyOperator(task_id='train_new_model', dag=dag)
-
-# Train multiple configurations for comparison
 train_baseline = PythonOperator(
     task_id='train_baseline_model',
     python_callable=train_with_config,
@@ -272,8 +255,6 @@ end = EmptyOperator(
     trigger_rule='none_failed_min_one_success', 
     dag=dag
 )
-
-# Define workflow
 start >> check_retrain >> [skip_training, train_new_model]
 train_new_model >> [train_baseline, train_larger, train_deeper] >> select_model >> end
 skip_training >> end
