@@ -307,7 +307,27 @@ with dag:
         provide_context=True,
     )
 
+    task_monitoring = DockerOperator(
+        task_id='monitor_drift_degradation',
+        image='iseg_trainer:latest',
+        api_version='auto',
+        auto_remove=True,
+        docker_url='unix://var/run/docker.sock',
+        network_mode=TRAINER_NETWORK_MODE,
+        mount_tmp_dir=False,
+        mounts=[
+            Mount(source=HOST_DATA, target='/app/data', type='bind'),
+            Mount(source=HOST_MODELS, target='/app/models', type='bind'),
+            Mount(source=HOST_OUTPUTS, target='/app/outputs', type='bind'),
+        ],
+        command='python -m src.monitoring_evidently',
+        environment={
+            'MLFLOW_TRACKING_URI': MLFLOW_URI,
+            'PYTHONUNBUFFERED': '1',
+        },
+    )
+
     task_validate_data >> task_check_model >> task_decide_train
     task_decide_train >> [task_train_model, skip_train]
     [task_train_model, skip_train] >> train_done
-    train_done >> inference_group >> task_visualize >> task_report
+    train_done >> inference_group >> task_monitoring >> task_visualize >> task_report

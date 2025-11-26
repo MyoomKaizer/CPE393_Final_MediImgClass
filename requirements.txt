@@ -8,3 +8,4 @@ tensorflow==2.20.0
 scikit-image
 scikit-learn
 mlflow==2.16.0
+evidently>=0.7.1
