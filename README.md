@@ -97,6 +97,10 @@ docker logs -f airflow_scheduler
 ├── models/
 │   └── unet_stage1_4class.keras     # Trained model output
 ├── outputs/
+│   ├── monitoring/
+│   │   ├── evidently_report.html    # Evidently summary (html)
+│   │   ├── evidently_report.json    # Evidently summary (json)
+│   │   └── monitoring_status.json   # Data srift simmary
 │   ├── subject-*-pred.nii.gz        # Inference predictions
 │   └── pipeline_report_*.json       # Pipeline execution reports
 ├── logs/
@@ -337,6 +341,11 @@ outputs/
 ├── pipeline_report_20251125.json  # Execution summary
 └── [visualization artifacts in MLflow]
 
+monitoring/
+├── evidently_report.html    # Evidently summary (html)
+├── evidently_report.json    # Evidently summary (json)
+└── monitoring_status.json   # Data srift simmary
+
 models/
 └── unet_stage1_4class.keras       # Trained model
 
@@ -465,5 +474,5 @@ Created for CPE393 Final Project - Medical Image Segmentation MLOps Pipeline
 
 ---
 
-**Last Updated**: November 25, 2025
+**Last Updated**: November 26, 2025
 **Status**: ✅ Fully Functional - All Components Tested
