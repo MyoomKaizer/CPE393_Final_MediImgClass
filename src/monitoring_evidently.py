@@ -1,12 +1,21 @@
 import os
 import json
 import glob
+import sys
 import numpy as np
 import nibabel as nib
 import pandas as pd
 import mlflow
+from scipy.ndimage import label as cc_label
+from skimage.util import img_as_ubyte
+from skimage.filters import threshold_otsu
+from skimage.measure import regionprops
+from scipy.stats import entropy
 from evidently import Report, Dataset, DataDefinition, MulticlassClassification
 from evidently.presets import DataDriftPreset, ClassificationPreset
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.preprocess import load_subjects, normalize_volume, VALUE_TO_INDEX
 
@@ -17,6 +26,44 @@ os.makedirs(MONITORING_OUTPUT, exist_ok=True)
 
 LABEL_VALUES = [0, 10, 150, 250]
 MLFLOW_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+MAX_ROWS = 200_000
+
+
+def compute_segmentation_features(seg_slice):
+    seg_slice = np.asarray(seg_slice).flatten()
+
+    hist = np.bincount(seg_slice, minlength=4)
+    total = hist.sum() if hist.sum() > 0 else 1
+
+    features = {
+        "seg_fg_ratio": 1.0 - (hist[0] / total),
+        "seg_class1_ratio": hist[1] / total,
+        "seg_class2_ratio": hist[2] / total,
+        "seg_class3_ratio": hist[3] / total,
+        "seg_entropy": float(entropy(hist / total)),
+    }
+
+    side = int(np.sqrt(seg_slice.size))
+    if side * side == seg_slice.size:
+        mask = (seg_slice.reshape(side, side) > 0).astype(np.uint8)
+        labeled, num_components = cc_label(mask)
+        features["seg_num_components"] = int(num_components)
+
+        if num_components > 0:
+            props = regionprops(labeled)
+            largest = max(props, key=lambda p: p.area)
+            features["seg_largest_area"] = float(largest.area)
+            features["seg_bbox_area"] = float(largest.bbox_area)
+        else:
+            features["seg_largest_area"] = 0.0
+            features["seg_bbox_area"] = 0.0
+    else:
+        features["seg_num_components"] = 0
+        features["seg_largest_area"] = 0.0
+        features["seg_bbox_area"] = 0.0
+
+    return features
+
 
 def load_reference_dataset():
     print("Loading reference dataset using src.preprocess.load_subjects...")
@@ -34,11 +81,17 @@ def load_reference_dataset():
             label_indices = np.array([VALUE_TO_INDEX.get(v, 0) for v in label_slice])
             df_slice = pd.DataFrame(features, columns=["T1", "T2"])
             df_slice["label"] = label_indices
-            # For reference, prediction can be set equal to label or left out
-            df_slice["prediction"] = label_indices  # assume perfect prediction for baseline
+            df_slice["prediction"] = label_indices
+
+            seg_features = compute_segmentation_features(label_indices)
+            for k, v in seg_features.items():
+                df_slice[k] = v
+
             slices_list.append(df_slice)
 
     df_ref = pd.concat(slices_list, ignore_index=True)
+    if len(df_ref) > MAX_ROWS:
+        df_ref = df_ref.sample(MAX_ROWS, random_state=42)
     print(f"Reference dataset shape: {df_ref.shape}")
     return df_ref
 
@@ -86,9 +139,16 @@ def load_current_dataset():
             df_slice = pd.DataFrame(features, columns=["T1", "T2"])
             df_slice["label"] = label_indices
             df_slice["prediction"] = pred_slice
+
+            seg_features = compute_segmentation_features(pred_slice)
+            for k, v in seg_features.items():
+                df_slice[k] = v
+
             slices_list.append(df_slice)
 
     df_cur = pd.concat(slices_list, ignore_index=True)
+    if len(df_cur) > MAX_ROWS:
+        df_cur = df_cur.sample(MAX_ROWS, random_state=42)
     print(f"Current dataset shape: {df_cur.shape}")
     return df_cur
 
@@ -111,7 +171,7 @@ def main():
     cur_dataset = Dataset.from_pandas(df_cur, data_definition=definition)
 
     report = Report([DataDriftPreset(), ClassificationPreset()])
-    eval_result = report.run(current=cur_dataset, reference=ref_dataset)
+    eval_result = report.run(reference_data=ref_dataset, current_data=cur_dataset)
 
     html_path = os.path.join(MONITORING_OUTPUT, "evidently_report.html")
     json_path = os.path.join(MONITORING_OUTPUT, "evidently_report.json")
@@ -126,14 +186,20 @@ def main():
         mlflow.log_artifact(html_path)
         mlflow.log_artifact(json_path)
 
-    # Extract simple flags from JSON for drift and degradation
+    try:
+        result_dict = eval_result.dict()
+    except AttributeError:
+        result_dict = eval_result.as_dict()
+
+    metrics_list = result_dict.get("metrics", [])
     data_drift_detected = any(
         m.get("dataset_drift", {}).get("data", {}).get("share_of_drifted_columns", 0) > 0.3
-        for m in eval_result.as_dict().get("metrics", [])
+        for m in metrics_list
         if "dataset_drift" in m
     )
     perf_metrics = [
-        m for m in eval_result.as_dict().get("metrics", []) if "classification_performance" in m
+        m for m in metrics_list
+        if "classification_performance" in m
     ]
     model_degradation_detected = False
     if perf_metrics:
